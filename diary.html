@@ -1,0 +1,16 @@
+---
+layout: default
+title: 일기
+permalink: /diary/
+---
+<h1>일기</h1>
+<ul class="post-list">
+  {% for post in site.categories.diary %}
+  <li>
+    <a href="{{ post.url | relative_url }}">{{ post.title }}</a>
+    <time>{{ post.date | date: "%Y.%m.%d" }}</time>
+  </li>
+  {% else %}
+  <li>아직 일기가 없어요.</li>
+  {% endfor %}
+</ul>
