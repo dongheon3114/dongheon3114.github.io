@@ -1,0 +1,28 @@
+---
+layout: default
+---
+<section class="intro">
+  <h1>{{ site.title }}</h1>
+  <p>{{ site.description }}</p>
+</section>
+
+<section>
+  <h2 class="section-title">최근 글</h2>
+  <ul class="post-list">
+    {% for post in site.posts limit: 10 %}
+    <li>
+      <span class="tag">{% if post.categories contains "diary" %}일기{% else %}생각{% endif %}</span>
+      <a href="{{ post.url | relative_url }}">{{ post.title }}</a>
+      <time>{{ post.date | date: "%Y.%m.%d" }}</time>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+
+{% assign chapters = site.book | sort: "chapter" %}
+{% if chapters.size > 0 %}
+<section>
+  <h2 class="section-title">쓰고 있는 책</h2>
+  <p><a href="{{ '/book/' | relative_url }}">목차 보기 →</a> 지금까지 {{ chapters.size }}개의 장</p>
+</section>
+{% endif %}
