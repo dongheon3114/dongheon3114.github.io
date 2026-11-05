@@ -81,6 +81,41 @@ h2 { font-size: 22px; margin-top: 40px; }
   font-family: var(--sans); font-size: 15px;
 }
 
+.site-header nav a.write-btn {
+  color: var(--accent); border: 1px solid var(--accent);
+  border-radius: 999px; padding: 2px 12px;
+}
+.site-header nav a.write-btn:hover { background: var(--accent); color: var(--bg); text-decoration: none; }
+
+.writer { font-family: var(--sans); font-size: 16px; }
+.kinds { display: flex; gap: 8px; margin-bottom: 20px; }
+.kinds label {
+  border: 1px solid var(--line); border-radius: 999px; padding: 6px 16px; cursor: pointer;
+}
+.kinds input { display: none; }
+.kinds label:has(input:checked) { border-color: var(--accent); color: var(--accent); }
+.field { display: block; margin-bottom: 18px; }
+.field[hidden] { display: none; }
+.field span { display: block; font-size: 14px; color: var(--muted); margin-bottom: 6px; }
+.field input, .field textarea {
+  width: 100%; padding: 12px 14px; font: inherit; color: var(--text);
+  background: transparent; border: 1px solid var(--line); border-radius: 8px;
+}
+.field textarea { font-family: var(--serif); font-size: 18px; line-height: 1.85; resize: vertical; }
+.field input:focus, .field textarea:focus { outline: none; border-color: var(--accent); }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.btn-primary, .btn-ghost {
+  font: inherit; padding: 10px 22px; border-radius: 8px; cursor: pointer;
+}
+.btn-primary { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
+.btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+.status { font-size: 14px; color: var(--accent); }
+.hint { font-size: 14px; color: var(--muted); line-height: 1.7; margin-top: 24px; }
+.btn-primary:disabled { opacity: .6; cursor: wait; }
+.setup { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+.setup summary { cursor: pointer; }
+.setup p { line-height: 1.7; }
+
 .site-footer {
   border-top: 1px solid var(--line); padding: 24px 0 40px;
   font-family: var(--sans); font-size: 13px; color: var(--muted);
