@@ -2,8 +2,8 @@
 #  여기만 바꾸면 블로그 정보가 바뀝니다
 # ─────────────────────────────────────────────
 title: "나의 기록장"
-description: "매일의 일기, 떠오른 생각, 천천히 쓰는 책"
-author: "나"
+description: "생각 정리 노트, 감정일기, 책 모음집, 좋아하는 문구"
+author: "동헌"
 
 url: "https://dongheon3114.github.io"
 baseurl: ""
