@@ -2,8 +2,11 @@
 (function () {
   var token = null;
   try { token = localStorage.getItem("blog-token"); } catch (e) {}
+  if (!token) return;
+  var writeBtn = document.querySelector(".write-btn");
+  if (writeBtn) writeBtn.hidden = false;
   var box = document.querySelector(".owner-tools");
-  if (!box || !token) return;
+  if (!box) return;
   box.hidden = false;
 
   var b = document.body;
