@@ -3,7 +3,7 @@ layout: default
 title: 글쓰기
 permalink: /write/
 ---
-<h1>글쓰기</h1>
+<h1 id="page-title">글쓰기</h1>
 
 <form id="writer" class="writer" onsubmit="return false">
   <div class="kinds" role="radiogroup" aria-label="글 종류">
@@ -75,8 +75,13 @@ permalink: /write/
     r.addEventListener("change", function () { sync(); save(); });
   });
 
+  // ── 수정 모드 상태 ──
+  var editing = null; // { path, sha, front: [줄들] }
+  var editPath = new URLSearchParams(location.search).get("edit");
+
   // ── 임시 저장 ──
   function save() {
+    if (editing || editPath) return; // 수정 중인 글은 임시 저장하지 않음
     store(DRAFT_KEY, JSON.stringify({ kind: kind(), title: $("title").value, body: $("body").value, chapter: $("chapter").value }));
   }
   function load() {
@@ -91,6 +96,7 @@ permalink: /write/
   }
   ["title", "body", "chapter"].forEach(function (id) { $(id).addEventListener("input", save); });
   $("clear").addEventListener("click", function () {
+    if (editing) { location.href = location.pathname; return; } // 수정 취소 → 새 글 쓰기로
     $("title").value = ""; $("body").value = ""; save(); say("지웠어요.");
   });
 
@@ -105,6 +111,7 @@ permalink: /write/
     var t = $("token").value.trim();
     if (!t) return;
     store(TOKEN_KEY, t); refreshSetup(); say("연결했어요. 이제 이 기기에서 바로 올릴 수 있어요.");
+    if (editPath && !editing) enterEditMode();
   });
   $("forget-token").addEventListener("click", function () {
     store(TOKEN_KEY, null); refreshSetup(); say("이 기기에서 토큰을 지웠어요.");
@@ -155,6 +162,101 @@ permalink: /write/
     }).then(function () { $("publish").disabled = false; });
   }
 
+  // ── 기존 글 불러오기 / 수정 저장 ──
+  function encPath(p) { return p.split("/").map(encodeURIComponent).join("/"); }
+  function contentsApi(p) { return "https://api.github.com/repos/" + USER + "/" + REPO + "/contents/" + encPath(p); }
+  function authHeaders(token) { return { "Authorization": "Bearer " + token, "Accept": "application/vnd.github+json" }; }
+
+  function unb64(s) {
+    var bin = atob(s.replace(/\s/g, "")), bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+  function unquote(v) {
+    v = (v || "").trim();
+    if (v.charAt(0) === '"') { try { return JSON.parse(v); } catch (e) {} }
+    return v.replace(/^['"]|['"]$/g, "");
+  }
+  function frontValue(lines, key) {
+    for (var i = 0; i < lines.length; i++) {
+      var m = lines[i].match(new RegExp("^" + key + ":\\s*(.*)$"));
+      if (m) return m[1];
+    }
+    return "";
+  }
+  function setFront(lines, key, value) {
+    for (var i = 0; i < lines.length; i++) {
+      if (new RegExp("^" + key + ":").test(lines[i])) { lines[i] = key + ": " + value; return; }
+    }
+    lines.push(key + ": " + value);
+  }
+
+  function enterEditMode() {
+    var token = fetchStore(TOKEN_KEY);
+    $("page-title").textContent = "글 수정";
+    $("publish").textContent = "수정 저장";
+    $("clear").textContent = "취소";
+    form.querySelectorAll('input[name="kind"]').forEach(function (r) { r.disabled = true; });
+    if (!token) {
+      say("수정하려면 아래 연결 설정에서 토큰을 먼저 넣어 주세요.");
+      $("setup").open = true;
+      return;
+    }
+    say("글을 불러오는 중…");
+    $("publish").disabled = true;
+    fetch(contentsApi(editPath) + "?ref=" + BRANCH, { headers: authHeaders(token), cache: "no-store" })
+      .then(function (r) {
+        if (r.status === 404) throw { msg: "글을 찾지 못했어요. 이미 삭제된 글일 수 있어요." };
+        if (r.status === 401) throw { msg: "토큰이 맞지 않거나 만료됐어요. 연결 설정에서 다시 넣어 주세요." };
+        if (!r.ok) throw { msg: "글을 불러오지 못했어요 (오류 " + r.status + ")." };
+        return r.json();
+      })
+      .then(function (d) {
+        var text = unb64(d.content);
+        var m = text.match(/^---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?([\s\S]*)$/);
+        var front = m ? m[1].split(/\r?\n/) : [];
+        var body = m ? m[2].replace(/^(\r?\n)+/, "") : text;
+        var k = /^_book\//.test(editPath) ? "book"
+              : (/thoughts/.test(frontValue(front, "categories")) ? "thoughts" : "diary");
+        form.querySelector('input[name="kind"][value="' + k + '"]').checked = true;
+        sync();
+        $("title").value = unquote(frontValue(front, "title"));
+        $("body").value = body.replace(/\s+$/, "");
+        if (k === "book") $("chapter").value = parseInt(frontValue(front, "chapter"), 10) || 1;
+        editing = { path: editPath, sha: d.sha, front: front };
+        say("");
+      })
+      .catch(function (e) { say(e && e.msg ? e.msg : "인터넷 연결을 확인해 주세요."); })
+      .then(function () { $("publish").disabled = false; });
+  }
+
+  function saveEdit() {
+    var token = fetchStore(TOKEN_KEY);
+    var title = $("title").value.trim();
+    var safe = title.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    var lines = editing.front.slice();
+    setFront(lines, "title", '"' + safe + '"');
+    if (/^_book\//.test(editing.path)) setFront(lines, "chapter", parseInt($("chapter").value, 10) || 1);
+    var text = "---\n" + lines.join("\n") + "\n---\n\n" + $("body").value.replace(/\s+$/, "") + "\n";
+    $("publish").disabled = true; say("저장하는 중…");
+    fetch(contentsApi(editing.path), {
+      method: "PUT", headers: authHeaders(token),
+      body: JSON.stringify({ message: "글 수정: " + title, content: b64(text), sha: editing.sha, branch: BRANCH })
+    }).then(function (r) {
+      if (r.status === 409) throw { msg: "그 사이 다른 곳에서 이 글이 바뀌었어요. 새로고침한 뒤 다시 수정해 주세요." };
+      if (r.status === 401) throw { msg: "토큰이 맞지 않거나 만료됐어요. 연결 설정에서 다시 넣어 주세요." };
+      if (r.status === 403 || r.status === 404) throw { msg: "토큰에 이 저장소 쓰기 권한이 없어요." };
+      if (!r.ok) throw { msg: "저장하지 못했어요 (오류 " + r.status + ")." };
+      return r.json();
+    }).then(function (d) {
+      editing.sha = d.content.sha;
+      editing.front = lines;
+      say("저장했어요! 1~2분 뒤 블로그에 반영돼요.");
+    }).catch(function (e) {
+      say(e && e.msg ? e.msg : "인터넷 연결을 확인해 주세요. 고친 내용은 화면에 남아 있어요.");
+    }).then(function () { $("publish").disabled = false; });
+  }
+
   function publishViaGitHub(f) {
     var base = "https://github.com/" + USER + "/" + REPO + "/new/" + BRANCH + "/" + f.dir +
                "?filename=" + encodeURIComponent(f.name) + "&value=";
@@ -173,10 +275,16 @@ permalink: /write/
   $("publish").addEventListener("click", function () {
     if (!USER || USER === "아이디") { say("_config.yml의 github_username을 먼저 내 아이디로 바꿔 주세요."); return; }
     if (!$("title").value.trim()) { say("제목을 적어 주세요."); $("title").focus(); return; }
+    if (editPath) {
+      if (editing) saveEdit();
+      else say("글을 아직 불러오지 못했어요. 연결 설정을 확인한 뒤 새로고침해 주세요.");
+      return;
+    }
     var f = buildFile(), token = fetchStore(TOKEN_KEY);
     token ? publishDirect(f, token) : publishViaGitHub(f);
   });
 
-  load(); sync(); refreshSetup();
+  refreshSetup();
+  if (editPath) { enterEditMode(); } else { load(); sync(); }
 })();
 </script>
