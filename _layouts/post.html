@@ -12,6 +12,12 @@ layout: default
   </div>
 </article>
 
+<div class="owner-tools" data-path="{{ page.path }}" hidden>
+  <a class="btn-ghost" href="{{ '/write/' | relative_url }}?edit={{ page.path | uri_escape }}">수정</a>
+  <button type="button" class="btn-ghost btn-danger js-delete">삭제</button>
+  <span class="owner-status" aria-live="polite"></span>
+</div>
+
 <nav class="pager">
   {% if page.previous %}<a href="{{ page.previous.url | relative_url }}">← {{ page.previous.title }}</a>{% else %}<span></span>{% endif %}
   {% if page.next %}<a href="{{ page.next.url | relative_url }}">{{ page.next.title }} →</a>{% endif %}

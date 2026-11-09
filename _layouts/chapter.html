@@ -10,6 +10,12 @@ layout: default
   </div>
 </article>
 
+<div class="owner-tools" data-path="{{ page.path }}" hidden>
+  <a class="btn-ghost" href="{{ '/write/' | relative_url }}?edit={{ page.path | uri_escape }}">수정</a>
+  <button type="button" class="btn-ghost btn-danger js-delete">삭제</button>
+  <span class="owner-status" aria-live="polite"></span>
+</div>
+
 <nav class="pager">
   {% for ch in chapters %}
     {% if ch.url == page.url %}

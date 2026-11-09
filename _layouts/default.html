@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
   {% feed_meta %}
 </head>
-<body>
+<body data-user="{{ site.github_username }}" data-repo="{% if site.github_repo %}{{ site.github_repo }}{% else %}{{ site.github_username }}.github.io{% endif %}" data-branch="{{ site.github_branch | default: 'main' }}" data-home="{{ '/' | relative_url }}">
   <header class="site-header">
     <a class="site-title" href="{{ '/' | relative_url }}">{{ site.title }}</a>
     <nav>
@@ -30,5 +30,6 @@
   <footer class="site-footer">
     © {{ 'now' | date: '%Y' }} {{ site.author }} · <a href="{{ '/feed.xml' | relative_url }}">RSS</a>
   </footer>
+  <script src="{{ '/assets/js/owner.js' | relative_url }}"></script>
 </body>
 </html>
