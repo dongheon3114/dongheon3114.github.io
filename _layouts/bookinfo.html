@@ -1,0 +1,27 @@
+---
+layout: default
+---
+{% assign shelf_menu = site.menus | where: "kind", "books" | first %}
+{% assign chapters = site.book | where: "book", page.slug | sort: "chapter" %}
+<p class="meta">{% if shelf_menu %}<a href="{{ shelf_menu.url | relative_url }}">{{ shelf_menu.title }}</a>{% else %}책{% endif %}</p>
+<h1>{{ page.title }}</h1>
+{% assign intro = content | strip %}
+{% if intro != "" %}<div class="content lead">{{ content }}</div>{% endif %}
+
+<h2 class="section-title">목차</h2>
+<ol class="toc">
+  {% for ch in chapters %}
+  <li value="{{ ch.chapter }}"><a href="{{ ch.url | relative_url }}">{{ ch.title }}</a></li>
+  {% else %}
+  <li class="empty">아직 쓴 장이 없어요.</li>
+  {% endfor %}
+</ol>
+
+<div class="owner-tools" data-path="{{ page.path }}" data-delete-prefix="_book/{{ page.slug }}-"
+     data-after="{% if shelf_menu %}{{ shelf_menu.url | relative_url }}{% else %}{{ '/' | relative_url }}{% endif %}"
+     data-confirm="이 책을 삭제할까요?" hidden>
+  <a class="btn-ghost" href="{{ '/write/' | relative_url }}?book={{ page.slug }}">✎ 새 장 쓰기</a>
+  <a class="btn-ghost" href="{{ '/write/' | relative_url }}?edit={{ page.path | uri_escape }}">책 정보 수정</a>
+  <button type="button" class="btn-ghost btn-danger js-delete">책 삭제</button>
+  <span class="owner-status" aria-live="polite"></span>
+</div>

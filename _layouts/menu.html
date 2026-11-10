@@ -1,0 +1,46 @@
+---
+layout: default
+---
+<h1>{{ page.title }}</h1>
+
+{% if page.kind == "books" %}
+  {% assign shelf = site.books | sort: "order", "last" %}
+  {% if shelf.size > 0 %}
+  <ol class="shelf">
+    {% for b in shelf %}
+    {% assign chs = site.book | where: "book", b.slug %}
+    <li>
+      <a class="shelf-title" href="{{ b.url | relative_url }}">{{ b.title }}</a>
+      <span class="shelf-count">{{ chs.size }}개의 장</span>
+      {% assign desc = b.content | strip_html | strip %}{% if desc != "" %}<p class="shelf-desc">{{ desc | truncate: 90 }}</p>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="lead">아직 쓰고 있는 책이 없어요.</p>
+  {% endif %}
+
+{% elsif page.kind == "page" %}
+  <div class="content">
+    {{ content }}
+  </div>
+  <div class="owner-tools" data-path="{{ page.path }}" hidden>
+    <a class="btn-ghost" href="{{ '/write/' | relative_url }}?edit={{ page.path | uri_escape }}">이 페이지 수정</a>
+    <span class="owner-status" aria-live="polite"></span>
+  </div>
+
+{% else %}
+  {% assign list = site.categories[page.slug] %}
+  {% assign intro = content | strip %}
+  {% if intro != "" %}<div class="content lead">{{ content }}</div>{% endif %}
+  <ul class="post-list">
+    {% for post in list %}
+    <li>
+      <a href="{{ post.url | relative_url }}">{{ post.title }}</a>
+      <time>{{ post.date | date: "%Y.%m.%d" }}</time>
+    </li>
+    {% else %}
+    <li>아직 글이 없어요.</li>
+    {% endfor %}
+  </ul>
+{% endif %}

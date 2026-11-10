@@ -1,29 +1,29 @@
 ---
 layout: default
 ---
-{% assign chapters = site.book | sort: "chapter" %}
+{% assign bookinfo = site.books | where: "slug", page.book | first %}
+{% assign chapters = site.book | where: "book", page.book | sort: "chapter" %}
 <article class="post chapter">
-  <p class="meta">책 · {{ page.chapter }}장</p>
+  <p class="meta">
+    {% if bookinfo %}<a href="{{ bookinfo.url | relative_url }}">{{ bookinfo.title }}</a> · {% endif %}{{ page.chapter }}장
+  </p>
   <h1>{{ page.title }}</h1>
   <div class="content">
     {{ content }}
   </div>
 </article>
 
-<div class="owner-tools" data-path="{{ page.path }}" hidden>
+<div class="owner-tools" data-path="{{ page.path }}" data-after="{% if bookinfo %}{{ bookinfo.url | relative_url }}{% else %}{{ '/' | relative_url }}{% endif %}" data-confirm="이 장을 삭제할까요?" hidden>
   <a class="btn-ghost" href="{{ '/write/' | relative_url }}?edit={{ page.path | uri_escape }}">수정</a>
   <button type="button" class="btn-ghost btn-danger js-delete">삭제</button>
   <span class="owner-status" aria-live="polite"></span>
 </div>
 
 <nav class="pager">
-  {% for ch in chapters %}
-    {% if ch.url == page.url %}
-      {% assign i = forloop.index0 %}
-    {% endif %}
-  {% endfor %}
+  {% assign i = -1 %}
+  {% for ch in chapters %}{% if ch.url == page.url %}{% assign i = forloop.index0 %}{% endif %}{% endfor %}
   {% assign prev_i = i | minus: 1 %}
   {% assign next_i = i | plus: 1 %}
-  {% if i > 0 %}<a href="{{ chapters[prev_i].url | relative_url }}">← {{ chapters[prev_i].title }}</a>{% else %}<a href="{{ '/book/' | relative_url }}">← 목차</a>{% endif %}
-  {% if chapters[next_i] %}<a href="{{ chapters[next_i].url | relative_url }}">{{ chapters[next_i].title }} →</a>{% endif %}
+  {% if i > 0 %}<a href="{{ chapters[prev_i].url | relative_url }}">← {{ chapters[prev_i].title }}</a>{% elsif bookinfo %}<a href="{{ bookinfo.url | relative_url }}">← 목차</a>{% else %}<span></span>{% endif %}
+  {% if i >= 0 and chapters[next_i] %}<a href="{{ chapters[next_i].url | relative_url }}">{{ chapters[next_i].title }} →</a>{% endif %}
 </nav>
