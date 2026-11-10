@@ -1,0 +1,160 @@
+---
+layout: default
+title: 메뉴 편집
+permalink: /edit-menu/
+---
+<h1>메뉴 편집</h1>
+<p class="lead">메뉴 이름을 바꾸거나, 화살표로 순서를 옮기거나, 새 메뉴를 추가할 수 있어요. 다 고친 뒤 <b>저장</b>을 눌러 주세요.</p>
+
+<div class="writer">
+  <ul class="menu-editor" id="rows"></ul>
+
+  <details class="add-menu" id="add">
+    <summary>＋ 새 메뉴 추가</summary>
+    <label class="field">
+      <span>메뉴 이름</span>
+      <input type="text" id="new-title" placeholder="예: 좋아하는 문구">
+    </label>
+    <label class="field">
+      <span>종류</span>
+      <select id="new-kind">
+        <option value="posts">글 모음 — 일기·생각처럼 글이 쌓이는 메뉴</option>
+        <option value="books">책 모음 — 책 제목별 목차를 보여주는 메뉴</option>
+        <option value="page">자유 페이지 — 소개처럼 한 페이지짜리 메뉴</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>주소 (선택, 영문·숫자·하이픈) — 비워 두면 자동으로 정해져요</span>
+      <input type="text" id="new-slug" placeholder="예: quotes → {{ site.url }}/quotes/">
+    </label>
+    <button type="button" class="btn-ghost" id="add-btn">목록에 추가</button>
+  </details>
+
+  <div class="actions">
+    <button type="button" id="save" class="btn-primary" disabled>저장</button>
+    <button type="button" id="reset" class="btn-ghost">되돌리기</button>
+    <span id="status" class="status" aria-live="polite"></span>
+  </div>
+  <p class="hint">
+    메뉴를 지워도 그 안의 글이나 책은 지워지지 않아요. 글은 첫 화면 "최근 글"에 그대로 남아요.
+    바뀐 메뉴는 저장 후 1~2분 뒤 블로그에 반영돼요.
+  </p>
+</div>
+
+<script src="{{ '/assets/js/gh.js' | relative_url }}"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var KIND = { posts: "글 모음", books: "책 모음", page: "자유 페이지" };
+  var RESERVED = ["write", "edit-menu", "books", "book", "assets", "feed", "index", "404"];
+  var rows = [], dirty = false;
+
+  function say(t) { $("status").textContent = t; }
+  function esc(s) { var d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+  function setDirty(v) { dirty = v; $("save").disabled = !v; }
+
+  function render() {
+    var live = rows.filter(function (r) { return !r.removed; });
+    $("rows").innerHTML = live.map(function (r, i) {
+      return '<li data-i="' + rows.indexOf(r) + '">' +
+        '<span class="move"><button type="button" class="icon js-up" aria-label="위로"' + (i === 0 ? " disabled" : "") + '>↑</button>' +
+        '<button type="button" class="icon js-down" aria-label="아래로"' + (i === live.length - 1 ? " disabled" : "") + '>↓</button></span>' +
+        '<span class="grow"><input type="text" class="js-title" value="' + esc(r.title) + '" aria-label="메뉴 이름">' +
+        '<small>' + KIND[r.kind] + ' · /' + esc(r.slug) + '/' + (r.isNew ? " · 새 메뉴" : "") + '</small></span>' +
+        '<button type="button" class="icon js-del" aria-label="삭제">✕</button></li>';
+    }).join("") || '<li class="empty">메뉴가 없어요. 아래에서 추가해 주세요.</li>';
+  }
+
+  $("rows").addEventListener("input", function (e) {
+    if (!e.target.classList.contains("js-title")) return;
+    rows[+e.target.closest("li").getAttribute("data-i")].title = e.target.value;
+    setDirty(true);
+  });
+  $("rows").addEventListener("click", function (e) {
+    var btn = e.target.closest("button"); if (!btn) return;
+    var r = rows[+btn.closest("li").getAttribute("data-i")];
+    if (btn.classList.contains("js-del")) {
+      var warn = r.kind === "posts" ? "\n(안의 글은 지워지지 않고 첫 화면 '최근 글'에 남아요)"
+               : r.kind === "books" ? "\n(책들은 지워지지 않아요)" : "\n(이 페이지의 내용도 함께 지워져요)";
+      if (!r.isNew && !confirm("'" + r.title + "' 메뉴를 지울까요?" + warn)) return;
+      if (r.isNew) rows.splice(rows.indexOf(r), 1); else r.removed = true;
+    } else {
+      var live = rows.filter(function (x) { return !x.removed; });
+      var i = live.indexOf(r), j = btn.classList.contains("js-up") ? i - 1 : i + 1;
+      if (j < 0 || j >= live.length) return;
+      var a = rows.indexOf(live[i]), b = rows.indexOf(live[j]);
+      rows[a] = live[j]; rows[b] = live[i];
+    }
+    setDirty(true); render();
+  });
+
+  function slugify(s) { return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); }
+  $("add-btn").addEventListener("click", function () {
+    var title = $("new-title").value.trim(), kind = $("new-kind").value, raw = $("new-slug").value.trim();
+    if (!title) { say("메뉴 이름을 적어 주세요."); $("new-title").focus(); return; }
+    var slug = raw ? slugify(raw) : (/^[\x00-\x7F]+$/.test(title) ? slugify(title) : "");
+    if (raw && !slug) { say("주소는 영문·숫자·하이픈으로 적어 주세요."); return; }
+    if (!slug) slug = GH.newSlug("m");
+    if (RESERVED.indexOf(slug) >= 0) { say("'" + slug + "'는 쓸 수 없는 주소예요. 다른 주소를 적어 주세요."); return; }
+    if (rows.some(function (r) { return r.slug === slug; })) { say("'" + slug + "' 주소는 이미 쓰고 있어요."); return; }
+    rows.push({ slug: slug, title: title, kind: kind, path: "_menus/" + slug + ".md", isNew: true });
+    $("new-title").value = ""; $("new-slug").value = ""; $("add").open = false;
+    setDirty(true); render(); say("추가했어요. 저장을 눌러야 블로그에 반영돼요.");
+  });
+
+  $("save").addEventListener("click", function () {
+    var live = rows.filter(function (r) { return !r.removed; });
+    if (live.some(function (r) { return !r.title.trim(); })) { say("이름이 비어 있는 메뉴가 있어요."); return; }
+    var changes = [];
+    rows.forEach(function (r) { if (r.removed && !r.isNew) changes.push({ path: r.path, remove: true }); });
+    live.forEach(function (r, i) {
+      var text;
+      if (r.isNew) {
+        text = GH.build(["title: " + GH.quote(r.title.trim()), "order: " + (i + 1), "kind: " + r.kind],
+                        r.kind === "page" ? "여기에 내용을 써 주세요. 이 페이지 아래의 '이 페이지 수정' 버튼으로 고칠 수 있어요." : "");
+      } else {
+        var doc = GH.parse(r.text), front = doc.front.slice();
+        GH.set(front, "title", r.title.trim());
+        GH.set(front, "order", i + 1);
+        text = GH.build(front, doc.body);
+      }
+      if (text !== r.text) changes.push({ path: r.path, content: text, row: r });
+    });
+    if (!changes.length) { say("바뀐 내용이 없어요."); setDirty(false); return; }
+    $("save").disabled = true; say("저장하는 중…");
+    GH.commit(changes.map(function (c) { return c.remove ? { path: c.path, remove: true } : { path: c.path, content: c.content }; }), "메뉴 수정")
+      .then(function () {
+        changes.forEach(function (c) { if (c.row) { c.row.text = c.content; c.row.isNew = false; } });
+        rows = rows.filter(function (r) { return !r.removed; });
+        setDirty(false); render();
+        say("저장했어요! 1~2분 뒤 블로그 메뉴에 반영돼요.");
+      })
+      .catch(function (e) { say(GH.message(e)); $("save").disabled = false; });
+  });
+
+  function load() {
+    if (!GH.token()) {
+      $("rows").innerHTML = '<li class="empty">메뉴를 편집하려면 <a href="{{ "/write/" | relative_url }}">글쓰기 화면</a>의 연결 설정에서 토큰을 먼저 넣어 주세요.</li>';
+      return;
+    }
+    say("메뉴를 불러오는 중…");
+    GH.listDir("_menus").then(function (paths) {
+      return Promise.all(paths.filter(function (p) { return /\.md$/.test(p); }).map(GH.readFile));
+    }).then(function (files) {
+      rows = files.map(function (f) {
+        var fm = GH.parse(f.text).front;
+        return { slug: f.path.replace(/^.*\//, "").replace(/\.md$/, ""), path: f.path, text: f.text,
+                 title: GH.get(fm, "title"), kind: KIND[GH.get(fm, "kind")] ? GH.get(fm, "kind") : "posts",
+                 order: parseFloat(GH.get(fm, "order")) };
+      }).sort(function (a, b) { return (isNaN(a.order) ? 1e9 : a.order) - (isNaN(b.order) ? 1e9 : b.order); });
+      setDirty(false); render(); say("");
+    }).catch(function (e) { say(GH.message(e)); });
+  }
+  $("reset").addEventListener("click", function () {
+    if (dirty && !confirm("저장하지 않은 변경을 버릴까요?")) return;
+    load();
+  });
+  window.addEventListener("beforeunload", function (e) { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+  load();
+})();
+</script>

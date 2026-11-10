@@ -14,18 +14,29 @@ lang: ko
 
 # ─────────────────────────────────────────────
 #  아래는 건드리지 않아도 됩니다
+#  (메뉴는 블로그의 "⚙ 메뉴" 화면에서 편집하세요)
 # ─────────────────────────────────────────────
 permalink: /:categories/:year/:month/:day/:title/
 markdown: kramdown
 
 collections:
-  book:
+  menus:          # 상단 메뉴 (_menus 폴더)
+    output: true
+    permalink: /:name/
+  books:          # 책 정보 (_books 폴더)
+    output: true
+    permalink: /books/:name/
+  book:           # 책의 각 장 (_book 폴더)
     output: true
     permalink: /book/:name/
 
 defaults:
   - scope: { path: "", type: posts }
     values: { layout: post }
+  - scope: { path: "", type: menus }
+    values: { layout: menu }
+  - scope: { path: "", type: books }
+    values: { layout: bookinfo }
   - scope: { path: "", type: book }
     values: { layout: chapter }
 

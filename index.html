@@ -10,19 +10,31 @@ layout: default
   <h2 class="section-title">최근 글</h2>
   <ul class="post-list">
     {% for post in site.posts limit: 10 %}
+    {% assign cat = post.categories | first %}
+    {% assign menu = site.menus | where: "slug", cat | first %}
     <li>
-      <span class="tag">{% if post.categories contains "diary" %}일기{% else %}생각{% endif %}</span>
+      {% if menu %}<span class="tag">{{ menu.title }}</span>{% endif %}
       <a href="{{ post.url | relative_url }}">{{ post.title }}</a>
       <time>{{ post.date | date: "%Y.%m.%d" }}</time>
     </li>
+    {% else %}
+    <li>아직 글이 없어요.</li>
     {% endfor %}
   </ul>
 </section>
 
-{% assign chapters = site.book | sort: "chapter" %}
-{% if chapters.size > 0 %}
+{% assign shelf = site.books | sort: "order", "last" %}
+{% if shelf.size > 0 %}
 <section>
   <h2 class="section-title">쓰고 있는 책</h2>
-  <p><a href="{{ '/book/' | relative_url }}">목차 보기 →</a> 지금까지 {{ chapters.size }}개의 장</p>
+  <ul class="post-list">
+    {% for b in shelf %}
+    {% assign chs = site.book | where: "book", b.slug %}
+    <li>
+      <a href="{{ b.url | relative_url }}">{{ b.title }}</a>
+      <time>{{ chs.size }}개의 장</time>
+    </li>
+    {% endfor %}
+  </ul>
 </section>
 {% endif %}

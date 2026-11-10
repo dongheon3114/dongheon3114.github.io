@@ -3,27 +3,36 @@ layout: default
 title: 글쓰기
 permalink: /write/
 ---
+{% assign w_menus = site.menus | sort: "order", "last" %}
+{% assign w_books = site.books | sort: "order", "last" %}
 <h1 id="page-title">글쓰기</h1>
 
 <form id="writer" class="writer" onsubmit="return false">
-  <div class="kinds" role="radiogroup" aria-label="글 종류">
-    <label><input type="radio" name="kind" value="diary" checked> 일기</label>
-    <label><input type="radio" name="kind" value="thoughts"> 생각</label>
-    <label><input type="radio" name="kind" value="book"> 책</label>
+  <div class="kinds" id="kinds" role="radiogroup" aria-label="어디에 쓸까요"></div>
+  <p class="edit-label" id="edit-label" hidden></p>
+
+  <div class="book-fields" id="book-fields" hidden>
+    <label class="field">
+      <span>어느 책인가요?</span>
+      <select id="book"></select>
+    </label>
+    <label class="field" id="new-book-field" hidden>
+      <span>새 책 제목</span>
+      <input type="text" id="new-book" placeholder="예: 나의 첫 번째 에세이">
+    </label>
+    <label class="field">
+      <span>몇 번째 장인가요?</span>
+      <input type="number" id="chapter" min="1" value="1">
+    </label>
   </div>
 
-  <label class="field chapter-field" hidden>
-    <span>몇 번째 장인가요?</span>
-    <input type="number" id="chapter" min="1" value="{{ site.book.size | plus: 1 }}">
-  </label>
-
   <label class="field">
-    <span>제목</span>
+    <span id="title-label">제목</span>
     <input type="text" id="title" placeholder="오늘의 제목" required>
   </label>
 
   <label class="field">
-    <span>본문</span>
+    <span id="body-label">본문</span>
     <textarea id="body" rows="16" placeholder="자유롭게 쓰세요. 빈 줄을 넣으면 문단이 나뉩니다."></textarea>
   </label>
 
@@ -40,7 +49,6 @@ permalink: /write/
     <p>
       이 화면에서 바로 글을 올리려면 GitHub 열쇠(토큰)를 한 번만 넣어 두면 돼요.
       열쇠는 <b>이 브라우저에만</b> 저장되고, 다른 사람에게는 보이지 않아요.
-      열쇠가 없는 기기에서는 "올리기"를 누르면 GitHub 화면으로 넘어가요.
     </p>
     <label class="field">
       <span>GitHub 토큰</span>
@@ -54,55 +62,94 @@ permalink: /write/
 </form>
 
 <script>
+var BLOG_MENUS = [{% for m in w_menus %}{ "slug": {{ m.slug | jsonify }}, "title": {{ m.title | jsonify }}, "kind": {{ m.kind | default: "posts" | jsonify }} }{% unless forloop.last %},{% endunless %}{% endfor %}];
+var BLOG_BOOKS = [{% for b in w_books %}{ "slug": {{ b.slug | jsonify }}, "title": {{ b.title | jsonify }} }{% unless forloop.last %},{% endunless %}{% endfor %}];
+var BLOG_CHAPTERS = [{% for ch in site.book %}{{ ch.path | jsonify }}{% unless forloop.last %},{% endunless %}{% endfor %}];
+</script>
+<script src="{{ '/assets/js/gh.js' | relative_url }}"></script>
+<script>
 (function () {
-  var USER = {{ site.github_username | jsonify }};
-  var REPO = {{ site.github_repo | default: "" | jsonify }} || (USER + ".github.io");
-  var BRANCH = {{ site.github_branch | default: "main" | jsonify }};
-  var DRAFT_KEY = "blog-draft", TOKEN_KEY = "blog-token";
-  var MAX_URL = 7000;
-
+  var DRAFT_KEY = "blog-draft", MAX_URL = 7000, NEW_BOOK = "__new__";
   var $ = function (id) { return document.getElementById(id); };
   var form = $("writer");
-  var chapterField = form.querySelector(".chapter-field");
+  var params = new URLSearchParams(location.search);
+  var editPath = params.get("edit");
+  var wantBook = params.get("book");
+  var editing = null; // { path, type, front }
+
+  var menus = BLOG_MENUS.slice(), books = BLOG_BOOKS.slice(), chapterFiles = BLOG_CHAPTERS.slice();
+
   function say(t) { $("status").textContent = t; }
-  function kind() { return form.querySelector('input[name="kind"]:checked').value; }
   function pad(n) { return String(n).padStart(2, "0"); }
   function store(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} }
   function fetchStore(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function esc(s) { var d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
 
-  function sync() { chapterField.hidden = kind() !== "book"; }
-  form.querySelectorAll('input[name="kind"]').forEach(function (r) {
-    r.addEventListener("change", function () { sync(); save(); });
-  });
+  // ── 종류(메뉴) 고르기 ──
+  function kind() { var r = form.querySelector('input[name="kind"]:checked'); return r ? r.value : ""; }
+  function renderKinds(selected) {
+    var html = "";
+    menus.filter(function (m) { return m.kind === "posts"; }).forEach(function (m) {
+      html += '<label><input type="radio" name="kind" value="' + esc(m.slug) + '"> ' + esc(m.title) + "</label>";
+    });
+    var shelf = menus.filter(function (m) { return m.kind === "books"; })[0];
+    if (shelf) html += '<label><input type="radio" name="kind" value="__book__"> ' + esc(shelf.title) + "</label>";
+    $("kinds").innerHTML = html || '<p class="lead">글을 쓸 메뉴가 없어요. ⚙ 메뉴에서 "글 모음" 메뉴를 만들어 주세요.</p>';
+    var radios = form.querySelectorAll('input[name="kind"]');
+    radios.forEach(function (r) { r.addEventListener("change", function () { sync(); save(); }); });
+    var pick = form.querySelector('input[name="kind"][value="' + (selected || "") + '"]') || radios[0];
+    if (pick) pick.checked = true;
+  }
 
-  // ── 수정 모드 상태 ──
-  var editing = null; // { path, sha, front: [줄들] }
-  var editPath = new URLSearchParams(location.search).get("edit");
+  // ── 책 고르기 ──
+  function chapterNumbers(slug) {
+    var pre = "_book/" + slug + "-", nums = [];
+    chapterFiles.forEach(function (p) {
+      if (p.indexOf(pre) === 0) { var n = parseInt(p.slice(pre.length), 10); if (n) nums.push(n); }
+    });
+    return nums;
+  }
+  function renderBooks(selected) {
+    var html = books.map(function (b) { return '<option value="' + esc(b.slug) + '">' + esc(b.title) + "</option>"; }).join("");
+    html += '<option value="' + NEW_BOOK + '">＋ 새 책 만들기</option>';
+    $("book").innerHTML = html;
+    $("book").value = selected && (selected === NEW_BOOK || books.some(function (b) { return b.slug === selected; }))
+      ? selected : (books[0] ? books[0].slug : NEW_BOOK);
+  }
+  function suggestChapter() {
+    if (editing) return;
+    var nums = $("book").value === NEW_BOOK ? [] : chapterNumbers($("book").value);
+    $("chapter").value = nums.length ? Math.max.apply(null, nums) + 1 : 1;
+  }
+  $("book").addEventListener("change", function () { sync(); suggestChapter(); save(); });
+
+  function sync() {
+    var isBook = kind() === "__book__" || (editing && editing.type === "chapter");
+    $("book-fields").hidden = !isBook;
+    $("new-book-field").hidden = !(isBook && !editing && $("book").value === NEW_BOOK);
+  }
 
   // ── 임시 저장 ──
   function save() {
-    if (editing || editPath) return; // 수정 중인 글은 임시 저장하지 않음
-    store(DRAFT_KEY, JSON.stringify({ kind: kind(), title: $("title").value, body: $("body").value, chapter: $("chapter").value }));
+    if (editPath) return;
+    store(DRAFT_KEY, JSON.stringify({
+      kind: kind(), book: $("book").value, newBook: $("new-book").value,
+      title: $("title").value, body: $("body").value, chapter: $("chapter").value
+    }));
   }
-  function load() {
-    try {
-      var d = JSON.parse(fetchStore(DRAFT_KEY) || "null");
-      if (!d) return;
-      var r = form.querySelector('input[name="kind"][value="' + d.kind + '"]');
-      if (r) r.checked = true;
-      $("title").value = d.title || ""; $("body").value = d.body || "";
-      if (d.chapter) $("chapter").value = d.chapter;
-    } catch (e) {}
+  function loadDraft() {
+    try { return JSON.parse(fetchStore(DRAFT_KEY) || "null") || {}; } catch (e) { return {}; }
   }
-  ["title", "body", "chapter"].forEach(function (id) { $(id).addEventListener("input", save); });
+  ["title", "body", "chapter", "new-book"].forEach(function (id) { $(id).addEventListener("input", save); });
   $("clear").addEventListener("click", function () {
-    if (editing) { location.href = location.pathname; return; } // 수정 취소 → 새 글 쓰기로
-    $("title").value = ""; $("body").value = ""; save(); say("지웠어요.");
+    if (editPath) { location.href = location.pathname; return; }
+    $("title").value = ""; $("body").value = ""; $("new-book").value = "";
+    save(); say("지웠어요.");
   });
 
   // ── 토큰 ──
   function refreshSetup() {
-    var has = !!fetchStore(TOKEN_KEY);
+    var has = !!GH.token();
     $("setup-summary").textContent = has ? "연결 설정 · 연결됨 ✓" : "연결 설정 · 아직 연결 안 됨";
     $("token").value = "";
     $("token").placeholder = has ? "저장되어 있어요" : "github_pat_로 시작하는 값";
@@ -110,181 +157,163 @@ permalink: /write/
   $("save-token").addEventListener("click", function () {
     var t = $("token").value.trim();
     if (!t) return;
-    store(TOKEN_KEY, t); refreshSetup(); say("연결했어요. 이제 이 기기에서 바로 올릴 수 있어요.");
-    if (editPath && !editing) enterEditMode();
+    GH.setToken(t); refreshSetup(); say("연결했어요. 이제 이 기기에서 바로 올릴 수 있어요.");
+    start();
   });
   $("forget-token").addEventListener("click", function () {
-    store(TOKEN_KEY, null); refreshSetup(); say("이 기기에서 토큰을 지웠어요.");
+    GH.setToken(null); refreshSetup(); say("이 기기에서 토큰을 지웠어요.");
   });
 
-  // ── 파일 만들기 ──
-  function buildFile() {
-    var title = $("title").value.trim();
-    var body = $("body").value.replace(/\s+$/, "");
-    var safe = title.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-    var now = new Date(), k = kind();
-    if (k === "book") {
-      var ch = parseInt($("chapter").value, 10) || 1;
-      return { dir: "_book", name: pad(ch) + "-chapter-" + ch + ".md", title: title, body: body,
-               front: '---\ntitle: "' + safe + '"\nchapter: ' + ch + "\n---\n\n" };
-    }
-    var date = now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate());
-    var time = pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
-    return { dir: "_posts", name: date + "-" + time + ".md", title: title, body: body,
-             front: '---\ntitle: "' + safe + '"\ncategories: ' + k + "\n---\n\n" };
-  }
-
-  function b64(str) {
-    var bytes = new TextEncoder().encode(str), bin = "";
-    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-    return btoa(bin);
-  }
-
-  function publishDirect(f, token) {
-    var path = f.dir + "/" + f.name;
-    var api = "https://api.github.com/repos/" + USER + "/" + REPO + "/contents/" + path;
-    var headers = { "Authorization": "Bearer " + token, "Accept": "application/vnd.github+json" };
-    $("publish").disabled = true; say("올리는 중…");
-    return fetch(api + "?ref=" + BRANCH, { headers: headers }).then(function (r) {
-      if (r.status === 200) throw { msg: "같은 장 번호의 글이 이미 있어요. 장 번호를 바꿔 주세요." };
-      return fetch(api, {
-        method: "PUT", headers: headers,
-        body: JSON.stringify({ message: "새 글: " + f.title, content: b64(f.front + f.body + "\n"), branch: BRANCH })
+  // ── 최신 메뉴·책 목록을 GitHub에서 바로 읽기 (방금 만든 책도 보이도록) ──
+  function loadLive() {
+    if (!GH.token()) return Promise.resolve();
+    function readAll(dir) {
+      return GH.listDir(dir).then(function (paths) {
+        return Promise.all(paths.filter(function (p) { return /\.md$/.test(p); }).map(GH.readFile));
       });
-    }).then(function (r) {
-      if (r.status === 401) throw { msg: "토큰이 맞지 않거나 만료됐어요. 연결 설정에서 다시 넣어 주세요." };
-      if (r.status === 403 || r.status === 404) throw { msg: "토큰에 이 저장소 쓰기 권한이 없어요. 토큰 설정을 확인해 주세요." };
-      if (!r.ok) throw { msg: "올리지 못했어요 (오류 " + r.status + ")." };
-      $("title").value = ""; $("body").value = ""; save();
-      say("올렸어요! 1~2분 뒤 블로그에 나타나요.");
-    }).catch(function (e) {
-      say(e && e.msg ? e.msg : "인터넷 연결을 확인해 주세요. 쓰던 글은 남아 있어요.");
-    }).then(function () { $("publish").disabled = false; });
-  }
-
-  // ── 기존 글 불러오기 / 수정 저장 ──
-  function encPath(p) { return p.split("/").map(encodeURIComponent).join("/"); }
-  function contentsApi(p) { return "https://api.github.com/repos/" + USER + "/" + REPO + "/contents/" + encPath(p); }
-  function authHeaders(token) { return { "Authorization": "Bearer " + token, "Accept": "application/vnd.github+json" }; }
-
-  function unb64(s) {
-    var bin = atob(s.replace(/\s/g, "")), bytes = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return new TextDecoder().decode(bytes);
-  }
-  function unquote(v) {
-    v = (v || "").trim();
-    if (v.charAt(0) === '"') { try { return JSON.parse(v); } catch (e) {} }
-    return v.replace(/^['"]|['"]$/g, "");
-  }
-  function frontValue(lines, key) {
-    for (var i = 0; i < lines.length; i++) {
-      var m = lines[i].match(new RegExp("^" + key + ":\\s*(.*)$"));
-      if (m) return m[1];
     }
-    return "";
-  }
-  function setFront(lines, key, value) {
-    for (var i = 0; i < lines.length; i++) {
-      if (new RegExp("^" + key + ":").test(lines[i])) { lines[i] = key + ": " + value; return; }
-    }
-    lines.push(key + ": " + value);
+    return Promise.all([readAll("_menus"), readAll("_books"), GH.listDir("_book")]).then(function (r) {
+      function info(f) {
+        var fm = GH.parse(f.text).front;
+        return { slug: f.path.replace(/^.*\//, "").replace(/\.md$/, ""), title: GH.get(fm, "title"),
+                 kind: GH.get(fm, "kind") || "posts", order: parseFloat(GH.get(fm, "order")) };
+      }
+      function byOrder(a, b) { return (isNaN(a.order) ? 1e9 : a.order) - (isNaN(b.order) ? 1e9 : b.order); }
+      menus = r[0].map(info).sort(byOrder);
+      books = r[1].map(info).sort(byOrder);
+      chapterFiles = r[2];
+    }).catch(function () { /* 실패하면 페이지에 들어있던 목록을 그대로 씀 */ });
   }
 
+  // ── 새 글 올리기 ──
+  function now() {
+    var d = new Date();
+    return { date: d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()),
+             time: pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()) };
+  }
+  function bodyText() { return $("body").value.replace(/\s+$/, ""); }
+
+  function buildNew() {
+    var title = $("title").value.trim(), k = kind(), changes = [], t = now();
+    if (k === "__book__") {
+      var slug = $("book").value, ch = parseInt($("chapter").value, 10) || 1;
+      if (slug === NEW_BOOK) {
+        var bookTitle = $("new-book").value.trim();
+        if (!bookTitle) throw "새 책 제목을 적어 주세요.";
+        slug = GH.newSlug("b");
+        changes.push({ path: "_books/" + slug + ".md",
+                       content: GH.build(['title: ' + GH.quote(bookTitle), "order: " + (books.length + 1)], "") });
+        books.push({ slug: slug, title: bookTitle });
+      } else if (chapterNumbers(slug).indexOf(ch) >= 0) {
+        throw ch + "장은 이미 있어요. 장 번호를 바꿔 주세요.";
+      }
+      var path = "_book/" + slug + "-" + pad(ch) + ".md";
+      changes.push({ path: path, content: GH.build(["title: " + GH.quote(title), "book: " + slug, "chapter: " + ch], bodyText()) });
+      return { changes: changes, message: "새 장: " + title, bookSlug: slug, chapterPath: path };
+    }
+    var p = "_posts/" + t.date + "-" + t.time + ".md";
+    changes.push({ path: p, content: GH.build(["title: " + GH.quote(title), "categories: " + k], bodyText()) });
+    return { changes: changes, message: "새 글: " + title, dir: "_posts", name: t.date + "-" + t.time + ".md" };
+  }
+
+  function publishViaGitHub(job) {
+    var c = job.changes[0];
+    var base = "https://github.com/" + GH.USER + "/" + GH.REPO + "/new/" + GH.BRANCH + "/_posts?filename=" +
+               encodeURIComponent(job.name) + "&value=";
+    var full = base + encodeURIComponent(c.content);
+    if (full.length <= MAX_URL) { window.open(full, "_blank"); say("GitHub에서 Commit changes를 눌러 주세요."); }
+    else say("글이 길어서 연결 설정을 먼저 해주셔야 해요.");
+  }
+
+  // ── 기존 글 수정 ──
+  function typeOf(path) {
+    if (/^_menus\//.test(path)) return "page";
+    if (/^_books\//.test(path)) return "bookinfo";
+    if (/^_book\//.test(path)) return "chapter";
+    return "post";
+  }
   function enterEditMode() {
-    var token = fetchStore(TOKEN_KEY);
-    $("page-title").textContent = "글 수정";
+    var type = typeOf(editPath);
+    var labels = { page: "페이지 수정", bookinfo: "책 정보 수정", chapter: "장 수정", post: "글 수정" };
+    $("page-title").textContent = labels[type];
     $("publish").textContent = "수정 저장";
     $("clear").textContent = "취소";
-    form.querySelectorAll('input[name="kind"]').forEach(function (r) { r.disabled = true; });
-    if (!token) {
-      say("수정하려면 아래 연결 설정에서 토큰을 먼저 넣어 주세요.");
-      $("setup").open = true;
-      return;
-    }
-    say("글을 불러오는 중…");
-    $("publish").disabled = true;
-    fetch(contentsApi(editPath) + "?ref=" + BRANCH, { headers: authHeaders(token), cache: "no-store" })
-      .then(function (r) {
-        if (r.status === 404) throw { msg: "글을 찾지 못했어요. 이미 삭제된 글일 수 있어요." };
-        if (r.status === 401) throw { msg: "토큰이 맞지 않거나 만료됐어요. 연결 설정에서 다시 넣어 주세요." };
-        if (!r.ok) throw { msg: "글을 불러오지 못했어요 (오류 " + r.status + ")." };
-        return r.json();
-      })
-      .then(function (d) {
-        var text = unb64(d.content);
-        var m = text.match(/^---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?([\s\S]*)$/);
-        var front = m ? m[1].split(/\r?\n/) : [];
-        var body = m ? m[2].replace(/^(\r?\n)+/, "") : text;
-        var k = /^_book\//.test(editPath) ? "book"
-              : (/thoughts/.test(frontValue(front, "categories")) ? "thoughts" : "diary");
-        form.querySelector('input[name="kind"][value="' + k + '"]').checked = true;
-        sync();
-        $("title").value = unquote(frontValue(front, "title"));
-        $("body").value = body.replace(/\s+$/, "");
-        if (k === "book") $("chapter").value = parseInt(frontValue(front, "chapter"), 10) || 1;
-        editing = { path: editPath, sha: d.sha, front: front };
-        say("");
-      })
-      .catch(function (e) { say(e && e.msg ? e.msg : "인터넷 연결을 확인해 주세요."); })
+    $("kinds").hidden = true;
+    if (type === "bookinfo") { $("title-label").textContent = "책 제목"; $("body-label").textContent = "책 소개 (비워 둬도 돼요)"; }
+    if (!GH.token()) { say("수정하려면 아래 연결 설정에서 토큰을 먼저 넣어 주세요."); $("setup").open = true; return; }
+    say("불러오는 중…"); $("publish").disabled = true;
+    GH.readFile(editPath).then(function (f) {
+      var doc = GH.parse(f.text);
+      editing = { path: editPath, type: type, front: doc.front };
+      $("title").value = GH.get(doc.front, "title");
+      $("body").value = doc.body;
+      var label = "";
+      if (type === "chapter") {
+        var bslug = GH.get(doc.front, "book");
+        renderBooks(bslug); $("book").disabled = true;
+        $("chapter").value = parseInt(GH.get(doc.front, "chapter"), 10) || 1;
+      } else if (type === "post") {
+        var cat = GH.get(doc.front, "categories").replace(/[\[\]]/g, "").split(/[ ,]+/)[0];
+        var m = menus.filter(function (x) { return x.slug === cat; })[0];
+        label = "메뉴: " + (m ? m.title : cat);
+      }
+      $("edit-label").textContent = label; $("edit-label").hidden = !label;
+      sync(); say("");
+    }).catch(function (e) {
+      say(e && e.status === 404 ? "글을 찾지 못했어요. 이미 삭제된 글일 수 있어요." : GH.message(e));
+    }).then(function () { $("publish").disabled = false; });
+  }
+  function saveEdit() {
+    var front = editing.front.slice();
+    GH.set(front, "title", $("title").value.trim());
+    if (editing.type === "chapter") GH.set(front, "chapter", parseInt($("chapter").value, 10) || 1);
+    $("publish").disabled = true; say("저장하는 중…");
+    GH.commit([{ path: editing.path, content: GH.build(front, bodyText()) }], "수정: " + $("title").value.trim())
+      .then(function () { editing.front = front; say("저장했어요! 1~2분 뒤 블로그에 반영돼요."); })
+      .catch(function (e) { say(GH.message(e) + " 고친 내용은 화면에 남아 있어요."); })
       .then(function () { $("publish").disabled = false; });
   }
 
-  function saveEdit() {
-    var token = fetchStore(TOKEN_KEY);
-    var title = $("title").value.trim();
-    var safe = title.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-    var lines = editing.front.slice();
-    setFront(lines, "title", '"' + safe + '"');
-    if (/^_book\//.test(editing.path)) setFront(lines, "chapter", parseInt($("chapter").value, 10) || 1);
-    var text = "---\n" + lines.join("\n") + "\n---\n\n" + $("body").value.replace(/\s+$/, "") + "\n";
-    $("publish").disabled = true; say("저장하는 중…");
-    fetch(contentsApi(editing.path), {
-      method: "PUT", headers: authHeaders(token),
-      body: JSON.stringify({ message: "글 수정: " + title, content: b64(text), sha: editing.sha, branch: BRANCH })
-    }).then(function (r) {
-      if (r.status === 409) throw { msg: "그 사이 다른 곳에서 이 글이 바뀌었어요. 새로고침한 뒤 다시 수정해 주세요." };
-      if (r.status === 401) throw { msg: "토큰이 맞지 않거나 만료됐어요. 연결 설정에서 다시 넣어 주세요." };
-      if (r.status === 403 || r.status === 404) throw { msg: "토큰에 이 저장소 쓰기 권한이 없어요." };
-      if (!r.ok) throw { msg: "저장하지 못했어요 (오류 " + r.status + ")." };
-      return r.json();
-    }).then(function (d) {
-      editing.sha = d.content.sha;
-      editing.front = lines;
-      say("저장했어요! 1~2분 뒤 블로그에 반영돼요.");
-    }).catch(function (e) {
-      say(e && e.msg ? e.msg : "인터넷 연결을 확인해 주세요. 고친 내용은 화면에 남아 있어요.");
-    }).then(function () { $("publish").disabled = false; });
-  }
-
-  function publishViaGitHub(f) {
-    var base = "https://github.com/" + USER + "/" + REPO + "/new/" + BRANCH + "/" + f.dir +
-               "?filename=" + encodeURIComponent(f.name) + "&value=";
-    var full = base + encodeURIComponent(f.front + f.body + "\n");
-    if (full.length <= MAX_URL) {
-      window.open(full, "_blank");
-      say("GitHub에서 Commit changes를 눌러 주세요.");
-    } else if (navigator.clipboard) {
-      navigator.clipboard.writeText(f.body).then(function () {
-        window.open(base + encodeURIComponent(f.front + "(여기에 붙여넣기)\n"), "_blank");
-        say("글이 길어서 본문을 복사해 뒀어요. GitHub에서 붙여넣은 뒤 Commit 하세요.");
-      });
-    }
-  }
-
+  // ── 올리기 버튼 ──
   $("publish").addEventListener("click", function () {
-    if (!USER || USER === "아이디") { say("_config.yml의 github_username을 먼저 내 아이디로 바꿔 주세요."); return; }
     if (!$("title").value.trim()) { say("제목을 적어 주세요."); $("title").focus(); return; }
-    if (editPath) {
-      if (editing) saveEdit();
-      else say("글을 아직 불러오지 못했어요. 연결 설정을 확인한 뒤 새로고침해 주세요.");
-      return;
+    if (editPath) { editing ? saveEdit() : say("글을 아직 불러오지 못했어요. 연결 설정을 확인한 뒤 새로고침해 주세요."); return; }
+    if (!kind()) { say("어디에 쓸지 먼저 골라 주세요."); return; }
+    var job;
+    try { job = buildNew(); } catch (msg) { say(msg); return; }
+    if (!GH.token()) {
+      if (kind() === "__book__") { say("책은 연결 설정을 한 기기에서 쓸 수 있어요."); $("setup").open = true; return; }
+      publishViaGitHub(job); return;
     }
-    var f = buildFile(), token = fetchStore(TOKEN_KEY);
-    token ? publishDirect(f, token) : publishViaGitHub(f);
+    $("publish").disabled = true; say("올리는 중…");
+    GH.commit(job.changes, job.message).then(function () {
+      if (job.chapterPath) {
+        chapterFiles.push(job.chapterPath);
+        renderBooks(job.bookSlug); $("new-book").value = "";
+      }
+      $("title").value = ""; $("body").value = "";
+      sync(); suggestChapter(); save();
+      say("올렸어요! 1~2분 뒤 블로그에 나타나요.");
+    }).catch(function (e) {
+      say(GH.message(e) + " 쓰던 글은 남아 있어요.");
+    }).then(function () { $("publish").disabled = false; });
   });
 
-  refreshSetup();
-  if (editPath) { enterEditMode(); } else { load(); sync(); }
+  // ── 시작 ──
+  function start() {
+    refreshSetup();
+    if (editPath) { renderBooks(); enterEditMode(); return; }
+    var d = loadDraft();
+    function draw() {
+      renderKinds(wantBook ? "__book__" : (kind() || d.kind));
+      renderBooks(wantBook || $("book").value || d.book);
+      sync(); suggestChapter();
+    }
+    $("title").value = d.title || ""; $("body").value = d.body || ""; $("new-book").value = d.newBook || "";
+    draw();
+    if (!wantBook && d.chapter) $("chapter").value = d.chapter;
+    loadLive().then(function () { var c = $("chapter").value; draw(); if (!wantBook && d.chapter) $("chapter").value = c; });
+  }
+  start();
 })();
 </script>
