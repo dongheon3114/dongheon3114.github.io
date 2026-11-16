@@ -1,6 +1,6 @@
 ---
 title: "소개"
-order: 4
+order: 3
 kind: page
 ---
 

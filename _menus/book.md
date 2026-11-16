@@ -1,5 +1,5 @@
 ---
 title: "책"
-order: 3
+order: 2
 kind: books
 ---
